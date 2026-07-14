@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hcp_crm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hcp_admin
+      POSTGRES_PASSWORD: hcp_password
+      POSTGRES_DB: hcp_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - hcp_crm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hcp_admin -d hcp_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: hcp_crm_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://hcp_admin:hcp_password@db:5432/hcp_crm
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4173
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: hcp_crm_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  hcp_crm_pgdata:
+    driver: local
